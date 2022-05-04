@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
         while (argument != NULL)
         {
             argument_arr[i] = argument;
+            i++;
             argument = strtok(input_str_buffer, " ");
         }
 
