@@ -1,6 +1,9 @@
 # outfile
 smallsh
 
+# vscode
+.vscode
+
 # Prerequisites
 *.d
 

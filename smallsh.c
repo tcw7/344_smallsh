@@ -17,6 +17,10 @@
 
 // function prototypes here
 void PID_to_str(pid_t pid_num, char *buffer);
+int smallsh_status(void);
+void smallsh_cd(char *path);
+void smallsh_exit(int *shell_status);
+
 
 
 // TODO: provide prompt for running commands
@@ -40,7 +44,7 @@ int main(void)
         printf(": ");
 
         // get input from command line
-        FILE *input_file_desc = 0; // set input fd to stdin
+        FILE *input_file_desc = stdin; // set input fd to stdin
         char *input_str_buffer = malloc(250);
         memset(input_str_buffer, 0, 250);
         int scan_items = fscanf(input_file_desc, "%s", input_str_buffer);
@@ -222,7 +226,7 @@ void smallsh_cd(char *path)
  */
 int smallsh_status(void)
 {
-    return;
+    return 0;
 }
 
 /**
