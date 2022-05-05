@@ -47,32 +47,35 @@ int main(void)
         FILE *input_file_desc = stdin; // set input fd to stdin
         char *input_str_buffer = malloc(250);
         memset(input_str_buffer, 0, 250);
-        int scan_items = fscanf(input_file_desc, "%s", input_str_buffer);
+        input_str_buffer = fgets(input_str_buffer, 250, input_file_desc);
 
         // TODO: handle blank lines and comments, which are lines beginning with the character `#'
         // blank line or comment
-        if (scan_items == 0)
+        if ((strcmp(input_str_buffer, "\n")) == 0)
         {
+            free(input_str_buffer);
             continue;
-        } 
-        if (input_str_buffer[0] == '#')
+        } if (input_str_buffer[0] == '#')
         {
-            continue;;
+            free(input_str_buffer);
+            continue;
         }
 
         // check command input
         char *argument = strtok(input_str_buffer, " ");
+        argument[strcspn(argument, "\n")] = 0;
         char *argument_arr[50] = {0};
         int arg_count = 0;
+        int length;
         while (argument != NULL)
         {
             // TODO: provide expansion for the variable `$$'
             // parse argument for "$$"
-            int length = strlen(argument);
+            length = strlen(argument);
             char *temp = malloc(250);
             memset(temp, 0, 250);
             char temp_char[2] = "\0\0";
-            for (int j = 0; j < (length - 1); j++)
+            for (int j = 0; j < (length); j++)
             {
                 if (argument[j] == '$' && 
                     argument[j+1] == '$')
@@ -87,15 +90,16 @@ int main(void)
                 }
             }
             int temp_len = strlen(temp);
-            char new_arg[temp_len + 1];
-            new_arg[temp_len] = 0;
-            strcpy(new_arg, temp);
+            temp = realloc(temp, (temp_len + 1));
 
             // add argument to vector/array
-            argument_arr[arg_count] = new_arg;
+            argument_arr[arg_count] = temp;
             arg_count++;
-            argument = strtok(input_str_buffer, " ");
-            free(temp);
+            argument = strtok(NULL, " ");
+            if (argument != NULL)
+            {
+                argument[strcspn(argument, "\n")] = 0;
+            }
         }
         free(input_str_buffer);
 
@@ -107,40 +111,34 @@ int main(void)
 
         // TODO: execute 3 commands: `exit' `cd' `status' via built in code
         // check if internal process
-        if (strcmp(argument_arr[0], "exit") == 0)
+        if ((strcmp(argument_arr[0], "exit")) == 0)
         {
             if ((arg_count - background_status) > 1)
             {
                 printf("ERROR\n"
                 "`exit' usage: exit\n"
                 "`exit' takes no arguments\n");
-                continue;
             }
             smallsh_exit(&break_status);
-            continue;
         }
-        else if (strcmp(argument_arr[0], "cd") == 0)
+        else if ((strcmp(argument_arr[0], "cd")) == 0)
         {
             if ((arg_count - background_status) > 2)
             {
                 printf("ERROR\n"
                 "`cd' usage: cd [path to directory]\n");
-                continue;
             }
             smallsh_cd(argument_arr[1]);
-            continue;
         }
-        else if (strcmp(argument_arr[0], "status") == 0)
+        else if ((strcmp(argument_arr[0], "status")) == 0)
         {
             if ((arg_count - background_status) > 1)
             {
                 printf("ERROR\n"
                 "`status' usage: status\n"
                 "`status' takes no arguments");
-                continue;
             }
             smallsh_status();
-            continue;
         }
         else
         {
@@ -175,6 +173,12 @@ int main(void)
                 waitpid(child_PID, &child_status, background_status);
                 break;
             }
+        }
+
+        // free argument pointers
+        for (int i = 0; i < arg_count; i++)
+        {
+            free(argument_arr[i]);
         }
     }
 
