@@ -62,11 +62,13 @@ int main(void)
         int arg_count = 0;
         while (argument != NULL)
         {
+            // TODO: provide expansion for the variable `$$'
             // parse argument for "$$"
             int length = strlen(argument);
             char *temp = malloc(250);
+            memset(temp, 0, 250);
             char temp_char[2] = "\0\0";
-            for (int j = 0; j < length - 1; j++)
+            for (int j = 0; j < (length - 1); j++)
             {
                 if (argument[j] == '$' && 
                     argument[j+1] == '$')
@@ -176,10 +178,9 @@ int main(void)
 }
 
 
-// TODO: provide expansion for the variable `$$'
 
 
-// TODO: execture other commands by creating new processes using a function from the `exec()' family of functions
+// TODO: exectue other commands by creating new processes using a function from the `exec()' family of functions
 
 // TODO: support input and output redirection
 
