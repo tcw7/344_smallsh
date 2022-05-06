@@ -8,24 +8,28 @@
  * *   with UNIX operating systems.
  */
 
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/types.h>
 #include <string.h>
+#include <signal.h>
 
 // function prototypes here
 void PID_to_str(pid_t pid_num, char *buffer);
-int smallsh_status(void);
+int smallsh_status(int *ch_status);
 void smallsh_cd(char *path);
-void smallsh_exit(int *shell_status);
+void smallsh_exit(int *break_status, int *error_status);
 
 
 
 // TODO: provide prompt for running commands
 int main(void)
 {
+    pid_t child_PID;
+    int child_status = 0;
     int break_status = 0;
     int error_status = 0;
     pid_t current_PID = getpid();
@@ -41,7 +45,8 @@ int main(void)
         int fork_status = 0;
 
         // use the colon symbol as a prompt for each command line
-        printf(": ");
+        printf(":");
+        fflush(stdout);
 
         // get input from command line
         FILE *input_file_desc = stdin; // set input fd to stdin
@@ -119,7 +124,7 @@ int main(void)
                 "`exit' usage: exit\n"
                 "`exit' takes no arguments\n");
             }
-            smallsh_exit(&break_status);
+            smallsh_exit(&break_status, &error_status);
         }
         else if ((strcmp(argument_arr[0], "cd")) == 0)
         {
@@ -129,6 +134,10 @@ int main(void)
                 "`cd' usage: cd [path to directory]\n");
             }
             smallsh_cd(argument_arr[1]);
+            char *temp_cwd = malloc(100);
+            printf("The cwd is: %s\n", getcwd(temp_cwd, 100));
+            fflush(stdout);
+            free(temp_cwd);
         }
         else if ((strcmp(argument_arr[0], "status")) == 0)
         {
@@ -138,7 +147,7 @@ int main(void)
                 "`status' usage: status\n"
                 "`status' takes no arguments");
             }
-            smallsh_status();
+            smallsh_status(&child_status);
         }
         else
         {
@@ -148,8 +157,7 @@ int main(void)
         if (fork_status)
         {
             // fork into child process
-            int child_status;
-            pid_t child_PID = fork();
+            child_PID = fork();
 
             switch (child_PID)
             {
@@ -201,9 +209,14 @@ int main(void)
  * 
  * @param shell_status pointer for shell status to end the process.
  */
-void smallsh_exit(int *shell_status)
+void smallsh_exit(int *break_status, int *error_status)
 {
-    *shell_status = 1;
+    *error_status = kill(0, SIGTERM);
+    if (*error_status != 0)
+    {
+        perror("ERROR: could not terminate shell processes correctly\n");
+    }
+    *break_status = 1;
     return;
 }
 
@@ -217,6 +230,16 @@ void smallsh_exit(int *shell_status)
  */
 void smallsh_cd(char *path)
 {
+    char *home_path = getenv("HOME");
+    if (path == NULL) {
+        chdir(home_path);
+    } else if (strcmp(path, "&") == 0) {
+        chdir(home_path);
+    } else {
+        if (chdir(path)) {
+            perror("ERROR: could not change directory");
+        }
+    }
     return;
 }
 
@@ -228,9 +251,11 @@ void smallsh_cd(char *path)
  * have been called but no others.
  * 
  */
-int smallsh_status(void)
+int smallsh_status(int *ch_status)
 {
-    return 0;
+    printf("%d\n", *ch_status);
+    fflush(stdout);
+    return *ch_status;
 }
 
 /**
