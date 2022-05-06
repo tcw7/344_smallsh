@@ -35,11 +35,17 @@ int main(void)
     pid_t current_PID = getpid();
     char current_PID_str[50];
     PID_to_str(current_PID, current_PID_str);
-
     
     // endless loop until break
     while (!break_status)
     {
+        // check for child termination
+        int child_exit_status;
+        pid_t returned_child_pid = waitpid(-1, &child_exit_status, WNOHANG);
+        if (returned_child_pid != 0 && returned_child_pid != -1) {
+            printf("Child process #%d terminated with exit status: %d\n", (int) returned_child_pid, (int) child_exit_status);
+        }
+
         // var to hold background or foreground status
         int background_status = 0;
         int fork_status = 0;
@@ -112,6 +118,7 @@ int main(void)
         if (strcmp(argument_arr[arg_count - 1], "&") == 0)
         {
             background_status = WNOHANG;
+            argument_arr[arg_count - 1] = NULL;
         }
 
         // TODO: execute 3 commands: `exit' `cd' `status' via built in code
@@ -170,13 +177,18 @@ int main(void)
                 break;
 
             // child process
-            case (0):
-                return(0);
+            case (0): ;
+                // printf("Entering child process...\n");
+                // fflush(stdout);
+                int exit_status = execvp(argument_arr[0], argument_arr);
+                exit(exit_status);
                 
 
             // parent process
             default:
-
+                if (background_status == WNOHANG) {
+                    printf("Background process initialized: %d\n", (int) child_PID);
+                }
                 // wait for child process to return
                 waitpid(child_PID, &child_status, background_status);
                 break;
@@ -270,3 +282,5 @@ void PID_to_str(pid_t pid_num, char *buffer)
     sprintf(buffer, "%d", pid_int);
     return;
 }
+
+// Signal Handlers
