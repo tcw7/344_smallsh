@@ -1,5 +1,7 @@
-# outfile
+# outfile, testing
 smallsh
+junk
+junk2
 
 # vscode
 .vscode
@@ -57,3 +59,4 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+.nfs000000003588fb250005fcf3

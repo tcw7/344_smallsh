@@ -21,23 +21,34 @@
 #include <error.h>
 #include <fcntl.h>
 
-
 // function prototypes here
 void PID_to_str(pid_t pid_num, char *buffer);
 int smallsh_status(int *ch_status);
 void smallsh_cd(char *path);
 void smallsh_exit(int *break_status, int *error_status);
+void handle_SIGTSTP(int signo);
+volatile sig_atomic_t foreground_only_switch = 0;
 
 
 int main(void)
 {
-    pid_t child_PID;
     int child_status = 0;
     int break_status = 0;
     int error_status = 0;
     pid_t current_PID = getpid();
     char current_PID_str[50];
     PID_to_str(current_PID, current_PID_str);
+    pid_t child_PID;
+
+    // signal handlers
+    struct sigaction ignore_sig_action = {0};
+    ignore_sig_action.sa_handler = SIG_IGN;
+    struct sigaction default_sig_action = {0};
+    default_sig_action.sa_handler = SIG_DFL;
+    struct sigaction handle_SIGTSTP_action = {0};
+    handle_SIGTSTP_action.sa_handler = handle_SIGTSTP;
+    sigaction(SIGINT, &ignore_sig_action, NULL);
+    sigaction(SIGTSTP, &handle_SIGTSTP_action, NULL);
     
     // endless loop until break
     while (!break_status)
@@ -121,6 +132,10 @@ int main(void)
             background_status = WNOHANG;
             argument_arr[arg_count - 1] = NULL;
             arg_count--;
+
+            if (foreground_only_switch == 1) {
+                background_status = 0;
+            }
         }
 
         // TODO: execute 3 commands: `exit' `cd' `status' via built in code
@@ -289,6 +304,14 @@ int main(void)
                     }
                 }
 
+                // if child is foreground, change signal handlers
+                if (background_status != WNOHANG) {
+                    sigaction(SIGTERM, &default_sig_action, NULL);
+                }
+
+                // change signal handlers for all child procs
+                sigaction(SIGTSTP, &ignore_sig_action, NULL);
+
                 int exit_status = execvp(new_arg_arr[0], new_arg_arr);
                 if (exit_status == -1) {
                     exit(1);
@@ -397,4 +420,20 @@ void PID_to_str(pid_t pid_num, char *buffer)
     return;
 }
 
-// Signal Handlers
+// Signal Handler
+/**
+ * @brief signal handler for parent process SIGTSTP
+ * 
+ * @param signo 
+ */
+void handle_SIGTSTP(int signo){
+    if (foreground_only_switch == 0) {
+        foreground_only_switch = 1;
+        char* message = "\nForeground-only mode activated.\n\0";
+        write(STDOUT_FILENO, message, 35);
+    } else {
+        foreground_only_switch = 0;
+        char* message = "\nForeground-only mode disabled.\n\0";
+        write(STDOUT_FILENO, message, 34);
+    }
+}
