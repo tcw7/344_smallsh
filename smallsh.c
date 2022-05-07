@@ -8,6 +8,7 @@
  * *   with UNIX operating systems.
  */
 
+
 #define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
 #include <stdlib.h>
@@ -18,6 +19,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <error.h>
+#include <fcntl.h>
+
 
 // function prototypes here
 void PID_to_str(pid_t pid_num, char *buffer);
@@ -26,8 +29,6 @@ void smallsh_cd(char *path);
 void smallsh_exit(int *break_status, int *error_status);
 
 
-
-// TODO: provide prompt for running commands
 int main(void)
 {
     pid_t child_PID;
@@ -62,8 +63,7 @@ int main(void)
         memset(input_str_buffer, 0, 2064);
         input_str_buffer = fgets(input_str_buffer, 2064, input_file_desc);
 
-        // TODO: handle blank lines and comments, which are lines beginning with the character `#'
-        // blank line or comment
+        // handle blank lines or comment lines
         if ((strcmp(input_str_buffer, "\n")) == 0)
         {
             free(input_str_buffer);
@@ -76,13 +76,12 @@ int main(void)
 
         // check command input
         char *argument = strtok(input_str_buffer, " ");
-        argument[strcspn(argument, "\n")] = 0;
-        char *argument_arr[512] = {0};
+        argument[strcspn(argument, "\n")] = 0; // remove trailing \n 
+        char *argument_arr[524] = {0};
         int arg_count = 0;
         int length;
         while (argument != NULL)
         {
-            // TODO: provide expansion for the variable `$$'
             // parse argument for "$$"
             length = strlen(argument);
             char *temp = malloc(2064);
@@ -121,10 +120,13 @@ int main(void)
         {
             background_status = WNOHANG;
             argument_arr[arg_count - 1] = NULL;
+            arg_count--;
         }
 
         // TODO: execute 3 commands: `exit' `cd' `status' via built in code
         // check if internal process
+
+        // exit internal process
         if ((strcmp(argument_arr[0], "exit")) == 0)
         {
             if ((arg_count - background_status) > 1)
@@ -135,6 +137,8 @@ int main(void)
             }
             smallsh_exit(&break_status, &error_status);
         }
+
+        // cd internal process
         else if ((strcmp(argument_arr[0], "cd")) == 0)
         {
             if ((arg_count - background_status) > 2)
@@ -148,6 +152,8 @@ int main(void)
             fflush(stdout);
             free(temp_cwd);
         }
+
+        // status internal process
         else if ((strcmp(argument_arr[0], "status")) == 0)
         {
             if ((arg_count - background_status) > 1)
@@ -163,8 +169,10 @@ int main(void)
             fork_status = 1;
         }
 
+        // child process required to exec external command
         if (fork_status == 1)
         {
+            
             // fork into child process
             child_PID = fork();
 
@@ -180,9 +188,108 @@ int main(void)
 
             // child process
             case (0): ;
-                // printf("Entering child process...\n");
-                // fflush(stdout);
-                int exit_status = execvp(argument_arr[0], argument_arr);
+
+                // check if I/O redirection
+                char *arg_io;
+                char *new_arg_arr[524] = {0};
+                int new_arg_count = 0;
+                int in_redirect = 0;
+                int out_redirect = 0;
+                for (int k = 0; k < arg_count; k++) {
+                    arg_io = argument_arr[k];
+                    
+                    // case if input redirection is requested
+                    if (strcmp(arg_io, "<") == 0) {
+
+                        // open filepath of next argument if possible
+                        int new_fd_in = open(argument_arr[k+1], O_RDONLY);
+                        if (new_fd_in == -1) {
+                            perror("Could not open input file for"
+                                   " redirection");
+                            exit(1);
+
+                        // redirect input to new fd
+                        } else {
+                            if ((dup2(new_fd_in, 0)) == -1) {
+                                perror("Could not redirect input");
+                                exit(1);
+                            }
+
+                            // set bool for input redirect set
+                            in_redirect = 1;
+                        }
+                        k++;
+
+                    // case if output redirection is requested
+                    } else if (strcmp(arg_io, ">") == 0) {
+
+                        // open filepath of next argument if possible
+                        int new_fd_out = open(argument_arr[k+1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (new_fd_out == -1) {
+                            perror("Could not open output file"
+                                   " for redirection");
+                            exit(1);
+
+                        // redirect output to output fd
+                        } else {
+                            if ((dup2(new_fd_out, 1)) == -1) {
+                                perror("Could not redirect output");
+                                exit(1);
+                            }
+
+                            // set bool for output redirect set
+                            out_redirect = 1;
+                        }
+                        k++;
+                    } else {
+                        new_arg_arr[new_arg_count] = arg_io;
+                        new_arg_count++;
+                    }
+                }
+
+                // check for background process redirection
+                if (background_status == WNOHANG) {
+
+                    // no input redirection given
+                    if (in_redirect == 0) {
+                        
+                        // open /dev/null
+                        int new_fd_in = open("/dev/null", O_RDONLY);
+                        if (new_fd_in == -1) {
+                            perror("Could not open /dev/null for"
+                                    " redirection");
+                            exit(1);
+
+                        // redirect input
+                        } else {
+                            if ((dup2(new_fd_in, 0)) == -1) {
+                                perror("Could not redirect input to /dev/null");
+                                exit(1);
+                            }
+                        }
+                    }
+                    
+                    // no output redirection given
+                    if (out_redirect == 0) {
+
+                        // no output redirection given
+                        int new_fd_out = open("/dev/null", O_WRONLY);
+                        if (new_fd_out == -1) {
+                            perror("Could not open /dev/null"
+                                    " for redirection");
+                            exit(1);
+
+                        // redirect output
+                        } else {
+                            if ((dup2(new_fd_out, 1)) == -1) {
+                                perror("Could not redirect output to /dev/null");
+                                exit(1);
+                            }
+                        }
+                    }
+                }
+
+                int exit_status = execvp(new_arg_arr[0], new_arg_arr);
                 if (exit_status == -1) {
                     exit(1);
                 }
@@ -191,15 +298,15 @@ int main(void)
 
             // parent process
             default:
-                if (background_status == WNOHANG) {
-                    printf("Background process initialized: %d\n", (int) child_PID);
-                }
                 // wait for child process to return
                 waitpid(child_PID, &child_status, background_status);
                 if (background_status != WNOHANG && WIFEXITED(child_status)) {
                     if (WEXITSTATUS(child_status) == 1) {
                         error(0, WEXITSTATUS(child_status), "ERROR");
                     }
+                }
+                if (background_status == WNOHANG) {
+                    printf("Background process initialized: %d\n", (int) child_PID);
                 }
                 break;
             }
@@ -214,13 +321,6 @@ int main(void)
 
     return(error_status);
 }
-
-
-
-
-// TODO: exectue other commands by creating new processes using a function from the `exec()' family of functions
-
-// TODO: support input and output redirection
 
 // TODO: implement custom handlers for 2 signals, SIGINT and SIGSTP
 
@@ -276,9 +376,9 @@ void smallsh_cd(char *path)
 int smallsh_status(int *ch_status)
 {
     if (WIFEXITED(*ch_status)) {
-        printf("%d\n", WEXITSTATUS(*ch_status));
+        printf("last foreground process exit value: %d\n", WEXITSTATUS(*ch_status));
     } else {
-        printf("%d\n", WIFSIGNALED(*ch_status));
+        printf("last foreground process exit value: %d\n", WIFSIGNALED(*ch_status));
     }
     fflush(stdout);
     return *ch_status;
