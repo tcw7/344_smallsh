@@ -16,6 +16,8 @@
 #include <sys/types.h>
 #include <string.h>
 #include <signal.h>
+#include <errno.h>
+#include <error.h>
 
 // function prototypes here
 void PID_to_str(pid_t pid_num, char *buffer);
@@ -51,14 +53,14 @@ int main(void)
         int fork_status = 0;
 
         // use the colon symbol as a prompt for each command line
-        printf(":");
+        printf("smallsh: ");
         fflush(stdout);
 
         // get input from command line
         FILE *input_file_desc = stdin; // set input fd to stdin
-        char *input_str_buffer = malloc(250);
-        memset(input_str_buffer, 0, 250);
-        input_str_buffer = fgets(input_str_buffer, 250, input_file_desc);
+        char *input_str_buffer = malloc(2064);
+        memset(input_str_buffer, 0, 2064);
+        input_str_buffer = fgets(input_str_buffer, 2064, input_file_desc);
 
         // TODO: handle blank lines and comments, which are lines beginning with the character `#'
         // blank line or comment
@@ -75,7 +77,7 @@ int main(void)
         // check command input
         char *argument = strtok(input_str_buffer, " ");
         argument[strcspn(argument, "\n")] = 0;
-        char *argument_arr[50] = {0};
+        char *argument_arr[512] = {0};
         int arg_count = 0;
         int length;
         while (argument != NULL)
@@ -83,8 +85,8 @@ int main(void)
             // TODO: provide expansion for the variable `$$'
             // parse argument for "$$"
             length = strlen(argument);
-            char *temp = malloc(250);
-            memset(temp, 0, 250);
+            char *temp = malloc(2064);
+            memset(temp, 0, 2064);
             char temp_char[2] = "\0\0";
             for (int j = 0; j < (length); j++)
             {
@@ -161,7 +163,7 @@ int main(void)
             fork_status = 1;
         }
 
-        if (fork_status)
+        if (fork_status == 1)
         {
             // fork into child process
             child_PID = fork();
@@ -181,6 +183,9 @@ int main(void)
                 // printf("Entering child process...\n");
                 // fflush(stdout);
                 int exit_status = execvp(argument_arr[0], argument_arr);
+                if (exit_status == -1) {
+                    exit(1);
+                }
                 exit(exit_status);
                 
 
@@ -191,6 +196,11 @@ int main(void)
                 }
                 // wait for child process to return
                 waitpid(child_PID, &child_status, background_status);
+                if (background_status != WNOHANG && WIFEXITED(child_status)) {
+                    if (WEXITSTATUS(child_status) == 1) {
+                        error(0, WEXITSTATUS(child_status), "ERROR");
+                    }
+                }
                 break;
             }
         }
@@ -265,7 +275,11 @@ void smallsh_cd(char *path)
  */
 int smallsh_status(int *ch_status)
 {
-    printf("%d\n", *ch_status);
+    if (WIFEXITED(*ch_status)) {
+        printf("%d\n", WEXITSTATUS(*ch_status));
+    } else {
+        printf("%d\n", WIFSIGNALED(*ch_status));
+    }
     fflush(stdout);
     return *ch_status;
 }
