@@ -91,6 +91,7 @@ int main(void)
         memset(input_str_buffer, 0, 2064);
         input_str_buffer = fgets(input_str_buffer, 2064, input_file_desc);
         if (input_str_buffer == NULL) {
+            free(input_str_buffer);
             continue;
         }
 
@@ -150,6 +151,7 @@ int main(void)
         if (strcmp(argument_arr[arg_count - 1], "&") == 0)
         {
             background_status = WNOHANG;
+            free(argument_arr[arg_count - 1]);
             argument_arr[arg_count - 1] = NULL;
             arg_count--;
 
@@ -180,10 +182,10 @@ int main(void)
                 "`cd' usage: cd [path to directory]\n");
             }
             smallsh_cd(argument_arr[1]);
-            char *temp_cwd = malloc(100);
+            // char *temp_cwd = malloc(100);
             // printf("The cwd is: %s\n", getcwd(temp_cwd, 100));
             // fflush(stdout);
-            free(temp_cwd);
+            // free(temp_cwd);
         }
 
         // status internal process
