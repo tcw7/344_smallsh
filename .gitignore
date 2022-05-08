@@ -1,8 +1,11 @@
-# outfile, testing
+# tcw
 smallsh
 junk
 junk2
 .DS_Store
+..gitignore.un~
+.gitignore~
+mytestresults
 
 # vscode
 .vscode
@@ -60,4 +63,3 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
-.nfs000000003588fb250005fcf3
