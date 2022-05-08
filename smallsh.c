@@ -74,7 +74,11 @@ int main(void)
         int child_exit_status;
         pid_t returned_child_pid = waitpid(-1, &child_exit_status, WNOHANG);
         if (returned_child_pid != 0 && returned_child_pid != -1) {
-            printf("Child process #%d done. Exit value: %d\n", (int) returned_child_pid, (int) child_exit_status);
+            if (WIFEXITED(child_exit_status)) {
+                printf("Child process #%d exited. Exit value: %d\n", (int) returned_child_pid, WEXITSTATUS(child_exit_status));
+            } else {
+                printf("Child process #%d killed. Signal value: %d\n", (int) returned_child_pid, WTERMSIG(child_exit_status));;
+            }
         }
 
         // var to hold background or foreground status
@@ -155,6 +159,7 @@ int main(void)
             argument_arr[arg_count - 1] = NULL;
             arg_count--;
 
+            // ignore "&" if foreground only mode active
             if (foreground_only_switch == 1) {
                 background_status = 0;
             }
@@ -170,6 +175,13 @@ int main(void)
                 "`exit' usage: exit\n"
                 "`exit' takes no arguments\n");
             }
+
+            // free argument pointers
+            for (int i = 0; i < arg_count; i++)
+            {
+                free(argument_arr[i]);
+            }
+            
             smallsh_exit(&break_status, &error_status);
         }
 
@@ -199,6 +211,8 @@ int main(void)
             }
             smallsh_status(&child_status);
         }
+
+        // fork() required to execute other commands
         else
         {
             fork_status = 1;
@@ -213,7 +227,7 @@ int main(void)
 
             switch (child_PID)
             {
-            // an error occured
+            // a fork() error occured
             case (-1):
                 perror("Could not implement a proper fork.\n"
                     "Shell exiting.");
@@ -221,7 +235,7 @@ int main(void)
                 error_status = 1;
                 break;
 
-            // child process
+            // * child process branch
             case (0): ;
 
                 // change signal handlers for all child procs
@@ -340,7 +354,7 @@ int main(void)
                 exit(exit_status);
                 
 
-            // parent process
+            // * parent process branch
             default: ;
                 
                 // block signals if waiting for foreground process
@@ -380,11 +394,9 @@ int main(void)
     return(error_status);
 }
 
-// TODO: implement custom handlers for 2 signals, SIGINT and SIGSTP
-
 /**
- * @brief exits smallsh. takes no arguments. when this command is run,
- * the smallsh will kill any other processes or jobs that were started
+ * @brief exits smallsh.  when this command is run,
+ * smallsh will kill any other processes or jobs that were started
  * before terminating itself.
  * 
  * @param shell_status pointer for shell status to end the process.
