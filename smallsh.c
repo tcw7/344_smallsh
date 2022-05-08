@@ -32,26 +32,40 @@ static volatile sig_atomic_t foreground_only_switch = 0;
 
 int main(void)
 {
+    // status local scopes
     int child_status = 0;
     int break_status = 0;
     int error_status = 0;
+
+    // child process local scopes
     pid_t current_PID = getpid();
     char current_PID_str[50];
     PID_to_str(current_PID, current_PID_str);
     pid_t child_PID;
 
-    // signal handlers
+    // * signal handlers
+    // ignore signal handler
     struct sigaction ignore_sig_action = {0};
     ignore_sig_action.sa_handler = SIG_IGN;
     sigfillset(&ignore_sig_action.sa_mask);
+
+    // default signal handler
     struct sigaction default_sig_action = {0};
     default_sig_action.sa_handler = SIG_DFL;
+
+    // SIGTSTP signal handler
     struct sigaction handle_SIGTSTP_action = {0};
     handle_SIGTSTP_action.sa_handler = handle_SIGTSTP;
     sigfillset(&handle_SIGTSTP_action.sa_mask);
     handle_SIGTSTP_action.sa_flags = 0;
+
+    // register handlers
     sigaction(SIGINT, &ignore_sig_action, NULL);
     sigaction(SIGTSTP, &handle_SIGTSTP_action, NULL);
+
+    // full signal set for blocking in child process
+    sigset_t block_set;
+    sigfillset(&block_set);
     
     // endless loop until break
     while (!break_status)
@@ -60,7 +74,7 @@ int main(void)
         int child_exit_status;
         pid_t returned_child_pid = waitpid(-1, &child_exit_status, WNOHANG);
         if (returned_child_pid != 0 && returned_child_pid != -1) {
-            printf("Child process #%d terminated with exit status: %d\n", (int) returned_child_pid, (int) child_exit_status);
+            printf("Child process #%d done. Exit value: %d\n", (int) returned_child_pid, (int) child_exit_status);
         }
 
         // var to hold background or foreground status
@@ -68,7 +82,7 @@ int main(void)
         int fork_status = 0;
 
         // use the colon symbol as a prompt for each command line
-        printf("smallsh: ");
+        printf(": ");
         fflush(stdout);
 
         // get input from command line
@@ -144,9 +158,7 @@ int main(void)
             }
         }
 
-        // TODO: execute 3 commands: `exit' `cd' `status' via built in code
-        // check if internal process
-
+        // * check if internal process
         // exit internal process
         if ((strcmp(argument_arr[0], "exit")) == 0)
         {
@@ -170,7 +182,7 @@ int main(void)
             smallsh_cd(argument_arr[1]);
             char *temp_cwd = malloc(100);
             // printf("The cwd is: %s\n", getcwd(temp_cwd, 100));
-            fflush(stdout);
+            // fflush(stdout);
             free(temp_cwd);
         }
 
@@ -193,14 +205,6 @@ int main(void)
         // child process required to exec external command
         if (fork_status == 1)
         {
-            // change signal handlers for all child procs
-            sigaction(SIGTSTP, &ignore_sig_action, NULL);
-            sigaction(SIGINT, &default_sig_action, NULL);
-
-            // if child is background, ignore SIGINT
-            if (background_status == WNOHANG) {
-                sigaction(SIGINT, &ignore_sig_action, NULL);
-            }
             
             // fork into child process
             child_PID = fork();
@@ -217,6 +221,15 @@ int main(void)
 
             // child process
             case (0): ;
+
+                // change signal handlers for all child procs
+                sigaction(SIGTSTP, &ignore_sig_action, NULL);
+                sigaction(SIGINT, &default_sig_action, NULL);
+
+                // if child is background, ignore SIGINT
+                if (background_status == WNOHANG) {
+                    sigaction(SIGINT, &ignore_sig_action, NULL);
+                }
 
                 // check if I/O redirection
                 char *arg_io;
@@ -326,8 +339,12 @@ int main(void)
                 
 
             // parent process
-            default:
-                sigaction(SIGINT, &ignore_sig_action, NULL);
+            default: ;
+                
+                // block signals if waiting for foreground process
+                if (background_status != WNOHANG) {
+                    sigprocmask(SIG_BLOCK, &block_set, NULL);
+                }
 
                 // wait for child process to return
                 waitpid(child_PID, &child_status, background_status);
@@ -340,15 +357,14 @@ int main(void)
                     if (WIFSIGNALED(child_status)) {
                         printf("terminated by signal %d\n", (int) WTERMSIG(child_status));
                     }
+                    
+                    // restore signals if returned from foreground process
+                    sigprocmask(SIG_UNBLOCK, &block_set, NULL);
                 }
                 
                 if (background_status == WNOHANG) {
                     printf("Background process initialized: %d\n", (int) child_PID);
                 }
-
-                // restore signal handlers
-                sigaction(SIGTSTP, &handle_SIGTSTP_action, NULL);
-                break;
             }
         }
 
@@ -446,12 +462,13 @@ void PID_to_str(pid_t pid_num, char *buffer)
 void handle_SIGTSTP(int signo){
     if (foreground_only_switch == 0) {
         foreground_only_switch = 1;
-        char* message = "\nForeground-only mode activated.\n\0";
-        write(STDOUT_FILENO, message, 35);
+        char* message = "\nEntering foreground-only mode"
+                        " (& is now ignored)\n\0";
+        write(STDOUT_FILENO, message, 51);
     } else {
         foreground_only_switch = 0;
-        char* message = "\nForeground-only mode disabled.\n\0";
-        write(STDOUT_FILENO, message, 34);
+        char* message = "\nExiting foreground-only mode\n\0";
+        write(STDOUT_FILENO, message, 31);
     }
     return;
 }
