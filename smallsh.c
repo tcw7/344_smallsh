@@ -169,7 +169,7 @@ int main(void)
             }
             smallsh_cd(argument_arr[1]);
             char *temp_cwd = malloc(100);
-            printf("The cwd is: %s\n", getcwd(temp_cwd, 100));
+            // printf("The cwd is: %s\n", getcwd(temp_cwd, 100));
             fflush(stdout);
             free(temp_cwd);
         }
