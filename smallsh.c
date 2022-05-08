@@ -27,7 +27,7 @@ int smallsh_status(int *ch_status);
 void smallsh_cd(char *path);
 void smallsh_exit(int *break_status, int *error_status);
 void handle_SIGTSTP(int signo);
-volatile sig_atomic_t foreground_only_switch = 0;
+static volatile sig_atomic_t foreground_only_switch = 0;
 
 
 int main(void)
@@ -43,10 +43,13 @@ int main(void)
     // signal handlers
     struct sigaction ignore_sig_action = {0};
     ignore_sig_action.sa_handler = SIG_IGN;
+    sigfillset(&ignore_sig_action.sa_mask);
     struct sigaction default_sig_action = {0};
     default_sig_action.sa_handler = SIG_DFL;
     struct sigaction handle_SIGTSTP_action = {0};
     handle_SIGTSTP_action.sa_handler = handle_SIGTSTP;
+    sigfillset(&handle_SIGTSTP_action.sa_mask);
+    handle_SIGTSTP_action.sa_flags = 0;
     sigaction(SIGINT, &ignore_sig_action, NULL);
     sigaction(SIGTSTP, &handle_SIGTSTP_action, NULL);
     
@@ -73,6 +76,9 @@ int main(void)
         char *input_str_buffer = malloc(2064);
         memset(input_str_buffer, 0, 2064);
         input_str_buffer = fgets(input_str_buffer, 2064, input_file_desc);
+        if (input_str_buffer == NULL) {
+            continue;
+        }
 
         // handle blank lines or comment lines
         if ((strcmp(input_str_buffer, "\n")) == 0)
@@ -187,6 +193,14 @@ int main(void)
         // child process required to exec external command
         if (fork_status == 1)
         {
+            // change signal handlers for all child procs
+            sigaction(SIGTSTP, &ignore_sig_action, NULL);
+            sigaction(SIGINT, &default_sig_action, NULL);
+
+            // if child is background, ignore SIGINT
+            if (background_status == WNOHANG) {
+                sigaction(SIGINT, &ignore_sig_action, NULL);
+            }
             
             // fork into child process
             child_PID = fork();
@@ -304,14 +318,6 @@ int main(void)
                     }
                 }
 
-                // if child is foreground, change signal handlers
-                if (background_status != WNOHANG) {
-                    sigaction(SIGTERM, &default_sig_action, NULL);
-                }
-
-                // change signal handlers for all child procs
-                sigaction(SIGTSTP, &ignore_sig_action, NULL);
-
                 int exit_status = execvp(new_arg_arr[0], new_arg_arr);
                 if (exit_status == -1) {
                     exit(1);
@@ -321,16 +327,27 @@ int main(void)
 
             // parent process
             default:
+                sigaction(SIGINT, &ignore_sig_action, NULL);
+
                 // wait for child process to return
                 waitpid(child_PID, &child_status, background_status);
-                if (background_status != WNOHANG && WIFEXITED(child_status)) {
-                    if (WEXITSTATUS(child_status) == 1) {
-                        error(0, WEXITSTATUS(child_status), "ERROR");
+                if (background_status != WNOHANG) {
+                    if (WIFEXITED(child_status)) {
+                        if (WEXITSTATUS(child_status) == 1) {
+                            error(0, WEXITSTATUS(child_status), "ERROR");
+                        }
+                    }
+                    if (WIFSIGNALED(child_status)) {
+                        printf("terminated by signal %d\n", (int) WTERMSIG(child_status));
                     }
                 }
+                
                 if (background_status == WNOHANG) {
                     printf("Background process initialized: %d\n", (int) child_PID);
                 }
+
+                // restore signal handlers
+                sigaction(SIGTSTP, &handle_SIGTSTP_action, NULL);
                 break;
             }
         }
@@ -401,7 +418,7 @@ int smallsh_status(int *ch_status)
     if (WIFEXITED(*ch_status)) {
         printf("last foreground process exit value: %d\n", WEXITSTATUS(*ch_status));
     } else {
-        printf("last foreground process exit value: %d\n", WIFSIGNALED(*ch_status));
+        printf("last foreground process terminated with signal value: %d\n", WTERMSIG(*ch_status));
     }
     fflush(stdout);
     return *ch_status;
@@ -436,4 +453,5 @@ void handle_SIGTSTP(int signo){
         char* message = "\nForeground-only mode disabled.\n\0";
         write(STDOUT_FILENO, message, 34);
     }
+    return;
 }
