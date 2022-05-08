@@ -6,6 +6,7 @@ junk2
 ..gitignore.un~
 .gitignore~
 mytestresults
+repo/
 
 # vscode
 .vscode
